@@ -1,6 +1,7 @@
 project('dolos2x', 'c')
 
 libpetraea_dep = dependency('libpetraea', fallback : ['petraea', 'libpetraea_dep'])
+libsdl2_dep = dependency('sdl2')
 
 #################################################
 # Sources
@@ -16,6 +17,6 @@ sources = [
 
 executable('dolos2x',
   sources,
-  dependencies : [libpetraea_dep],
+  dependencies : [libpetraea_dep, libsdl2_dep],
   install : true)
 
