@@ -76,7 +76,7 @@ int main() {
   SDL_Renderer* sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
 
   char c = fgetc(stdin);
-  while(c != 'q') {
+  while((c = fgetc(stdin)) != 'q') {
     clock(&arm920);
   }
 
