@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
+
 #include <SDL.h>
+#include <glib.h>
+
+#include <dolos2x.h>
 #include <cpu.h>
 #include <instr.h>
 
@@ -9,12 +13,19 @@ static struct termios old_tio, new_tio;
 
 #define GP2X_RAM_SIZE (64 * 1024 * 1024)
 
-void* gp2x_ram;
-void* gp2x_mmio;
+static void* gp2x_ram;
+static GHashTable* mmio_read_callbacks;
+static GHashTable* mmio_write_callbacks;
+
+static void add_read_callback(uint32_t addr, mem_callback cb) {
+  g_hash_table_insert(mmio_read_callbacks, GUINT_TO_POINTER(addr), cb);
+}
+
+static void add_write_callback(uint32_t addr, mem_callback cb) {
+  g_hash_table_insert(mmio_write_callbacks, GUINT_TO_POINTER(addr), cb);
+}
 
 // TODO - when arm940 is added, these need to block on non-IO (i.e. RAM) accesses while the other core has the bus
-// TODO - callback notifies upon read or write
-
 int bus_fetch(uint32_t addr, int bytes, void* ret) {
   if(addr < GP2X_RAM_SIZE) {
     if(bytes == 4) {
@@ -26,8 +37,14 @@ int bus_fetch(uint32_t addr, int bytes, void* ret) {
     }
     return 0;
   } else {
-    fprintf(stderr, "Tried to write unmapped address 0x%x\n", addr);
-    return -1;
+    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
+    if(cb != NULL) {
+      (*cb)(addr, bytes, ret);
+      return 0;
+    } else {
+      fprintf(stderr, "Tried to read unmapped address 0x%x\n", addr);
+      return -1;
+    }
   }
 }
 
@@ -42,14 +59,33 @@ int bus_write(uint32_t addr, int bytes, void* value) {
     }
     return 0;
   } else {
-    fprintf(stderr, "Tried to write unmapped address 0x%x\n", addr);
-    return -1;
+    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_write_callbacks, GUINT_TO_POINTER(addr));
+    if(cb != NULL) {
+      (*cb)(addr, bytes, value);
+      return 0;
+    } else {
+      fprintf(stderr, "Tried to write unmapped address 0x%x\n", addr);
+      return -1;
+    }
   }
 }
 
-void clock(pt_arm_cpu* arm920) {
+void clock_cpu(pt_arm_cpu* arm920) {
   int r = pt_arm_clock(arm920);
   printf("Clock result: %d, R0: 0x%.8x R1: 0x%.8x\n\n", r, arm920->r0, arm920->r1);
+}
+
+void cleanup() {
+    //  SDL_DestroyRenderer(sdlRenderer);
+  //  SDL_DestroyWindow(sdlWindow);
+  //  SDL_Quit();
+
+  g_hash_table_destroy(mmio_read_callbacks);
+  g_hash_table_destroy(mmio_write_callbacks);
+  free(gp2x_ram);
+  
+  tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+  printf("\n");
 }
 
 int main() {
@@ -60,8 +96,24 @@ int main() {
   tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
   
   gp2x_ram = calloc(1, GP2X_RAM_SIZE);
-  gp2x_mmio = calloc(1, 0x10000);
-  
+  mmio_read_callbacks = g_hash_table_new(g_direct_hash, g_direct_equal);
+  mmio_write_callbacks = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+  atexit(cleanup);
+
+  dolos_peripheral peripherals[] = {
+    peri_nand
+  };
+  for(int i = 0 ; i < (sizeof(peripherals)/sizeof(dolos_peripheral)) ; i++) {
+    dolos_peripheral p = peripherals[i];
+    printf("Initialising %s\n", p.name);
+    int r = p.init(&add_read_callback, &add_write_callback);
+    if(r != 0) {
+      fprintf(stderr, "Failed to initialise %s (%d), terminating!\n", p.name, r);
+      exit(1);
+    }
+  }
+    
   pt_arm_cpu arm920;
   arm920.logging = true;
   pt_arm_init_cpu(&arm920, ARM920T,
@@ -78,19 +130,12 @@ int main() {
     return 1;
   }
       
-  SDL_Window* sdlWindow = SDL_CreateWindow("dolos2x", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 960, 0);
-  SDL_Renderer* sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
+  //  SDL_Window* sdlWindow = SDL_CreateWindow("dolos2x", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 960, 0);
+  //  SDL_Renderer* sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
 
   char c = fgetc(stdin);
   while((c = fgetc(stdin)) != 'q') {
-    clock(&arm920);
+    clock_cpu(&arm920);
   }
-  
-  tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
-  printf("\n");
-
-  SDL_DestroyRenderer(sdlRenderer);
-  SDL_DestroyWindow(sdlWindow);
-  SDL_Quit();
 }
 
