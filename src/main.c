@@ -70,9 +70,11 @@ int bus_write(uint32_t addr, int bytes, void* value) {
   }
 }
 
-void clock_cpu(pt_arm_cpu* arm920) {
+void clock_cpu(pt_arm_cpu* arm920, bool log) {
   int r = pt_arm_clock(arm920);
-  printf("Clock result: %d, R0: 0x%.8x R1: 0x%.8x\n\n", r, arm920->r0, arm920->r1);
+  if(log) {
+    printf("Clock result: %d, R0: 0x%.8x R1: 0x%.8x R2: 0x%.8x R3: 0x%.8x R4: 0x%.8x R5: 0x%.8x\n\n", r, arm920->r0, arm920->r1, arm920->r2, arm920->r3, arm920->r4, arm920->r5);
+  }
 }
 
 void cleanup() {
@@ -115,7 +117,7 @@ int main() {
   }
     
   pt_arm_cpu arm920;
-  arm920.logging = true;
+  //  arm920.logging = true;
   pt_arm_init_cpu(&arm920, ARM920T,
 		  &bus_fetch, &bus_write);
 
@@ -132,10 +134,14 @@ int main() {
       
   //  SDL_Window* sdlWindow = SDL_CreateWindow("dolos2x", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 960, 0);
   //  SDL_Renderer* sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
-
-  char c = fgetc(stdin);
+  while(arm920.r15 != 0xE8) {
+    clock_cpu(&arm920, false);
+  }
+  printf("Hit breakpoint 0xE8\n");
+  
+  char c;
   while((c = fgetc(stdin)) != 'q') {
-    clock_cpu(&arm920);
+    clock_cpu(&arm920, true);
   }
 }
 

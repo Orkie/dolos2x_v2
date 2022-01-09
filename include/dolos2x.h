@@ -12,5 +12,11 @@ typedef struct {
 
 extern dolos_peripheral peri_nand;
 
+#define CLEARBITS(in, bits) (in & (~bits))
+
+#define U8_VAL(v) (*((uint8_t*)v))
+#define U16_VAL(v) (*((uint16_t*)v))
+#define U32_VAL(v) (*((uint32_t*)v))
+
 #endif
 
