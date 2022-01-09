@@ -71,9 +71,9 @@ int bus_write(uint32_t addr, int bytes, void* value) {
 }
 
 void clock_cpu(pt_arm_cpu* arm920, bool log) {
-  int r = pt_arm_clock(arm920);
+  pt_arm_clock(arm920);
   if(log) {
-    printf("Clock result: %d, R0: 0x%.8x R1: 0x%.8x R2: 0x%.8x R3: 0x%.8x R4: 0x%.8x R5: 0x%.8x\n\n", r, arm920->r0, arm920->r1, arm920->r2, arm920->r3, arm920->r4, arm920->r5);
+    printf("PC: 0x%.8x R0: 0x%.8x R1: 0x%.8x R2: 0x%.8x R3: 0x%.8x R4: 0x%.8x R5: 0x%.8x\n\n", arm920->r15, arm920->r0, arm920->r1, arm920->r2, arm920->r3, arm920->r4, arm920->r5);
   }
 }
 
