@@ -11,6 +11,7 @@ typedef struct {
 } dolos_peripheral;
 
 extern dolos_peripheral peri_nand;
+extern dolos_peripheral peri_clock;
 
 #define CLEARBITS(in, bits) (in & (~bits))
 

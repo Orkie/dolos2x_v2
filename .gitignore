@@ -55,3 +55,6 @@ subprojects/petraea
 build/
 data/
 
+\#*\#
+.\#*
+

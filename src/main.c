@@ -42,7 +42,7 @@ int bus_fetch(uint32_t addr, int bytes, void* ret) {
       (*cb)(addr, bytes, ret);
       return 0;
     } else {
-      fprintf(stderr, "Tried to read unmapped address 0x%x\n", addr);
+      fprintf(stderr, "Tried to read unmapped address 0x%.8x\n", addr);
       return -1;
     }
   }
@@ -64,14 +64,17 @@ int bus_write(uint32_t addr, int bytes, void* value) {
       (*cb)(addr, bytes, value);
       return 0;
     } else {
-      fprintf(stderr, "Tried to write unmapped address 0x%x\n", addr);
+      fprintf(stderr, "Tried to write unmapped address 0x%.8x\n", addr);
       return -1;
     }
   }
 }
 
 void clock_cpu(pt_arm_cpu* arm920, bool log) {
-  pt_arm_clock(arm920);
+  int r = pt_arm_clock(arm920);
+  if(r != 0) {
+    fprintf(stderr, "pt_arm_clock returned %d at 0x%.8x\n", r, arm920->r15);
+  }
   if(log) {
     printf("PC: 0x%.8x R0: 0x%.8x R1: 0x%.8x R2: 0x%.8x R3: 0x%.8x R4: 0x%.8x R5: 0x%.8x\n\n", arm920->r15, arm920->r0, arm920->r1, arm920->r2, arm920->r3, arm920->r4, arm920->r5);
   }
@@ -104,7 +107,8 @@ int main() {
   atexit(cleanup);
 
   dolos_peripheral peripherals[] = {
-    peri_nand
+    peri_nand,
+    peri_clock
   };
   for(int i = 0 ; i < (sizeof(peripherals)/sizeof(dolos_peripheral)) ; i++) {
     dolos_peripheral p = peripherals[i];
@@ -134,7 +138,7 @@ int main() {
       
   //  SDL_Window* sdlWindow = SDL_CreateWindow("dolos2x", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 960, 0);
   //  SDL_Renderer* sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
-  while(arm920.r15 != 0xE8) {
+  while(true){//arm920.r15 != 0xE8) {
     clock_cpu(&arm920, false);
   }
   printf("Hit breakpoint 0xE8\n");

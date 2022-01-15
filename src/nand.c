@@ -156,7 +156,6 @@ static void NFDATA_read(uint32_t addr, int bytes, void* ret) {
   }
 }
 
-
 static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback) {
   nandFp = fopen("data/nand.bin", "rb+");
   if(nandFp == NULL) {
