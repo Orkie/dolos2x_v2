@@ -14,7 +14,8 @@ sources = [
   'src/main.c',
   'src/nand.c',
   'src/clock.c',
-  'src/timer.c'
+  'src/timer.c',
+  'src/uart.c'
 ]
 
 #################################################
