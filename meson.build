@@ -13,7 +13,8 @@ inc = include_directories('include')
 sources = [
   'src/main.c',
   'src/nand.c',
-  'src/clock.c'
+  'src/clock.c',
+  'src/timer.c'
 ]
 
 #################################################

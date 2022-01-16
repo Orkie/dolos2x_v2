@@ -108,7 +108,8 @@ int main() {
 
   dolos_peripheral peripherals[] = {
     peri_nand,
-    peri_clock
+    peri_clock,
+    peri_timer
   };
   for(int i = 0 ; i < (sizeof(peripherals)/sizeof(dolos_peripheral)) ; i++) {
     dolos_peripheral p = peripherals[i];
