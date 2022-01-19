@@ -16,7 +16,8 @@ sources = [
   'src/clock.c',
   'src/timer.c',
   'src/uart.c',
-  'src/video.c'
+  'src/video.c',
+  'src/gpio.c'
 ]
 
 #################################################

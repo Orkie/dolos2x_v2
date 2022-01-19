@@ -17,6 +17,7 @@ extern dolos_peripheral peri_clock;
 extern dolos_peripheral peri_timer;
 extern dolos_peripheral peri_uart;
 extern dolos_peripheral peri_video;
+extern dolos_peripheral peri_gpio;
 
 extern SDL_Renderer* sdlRenderer;
 

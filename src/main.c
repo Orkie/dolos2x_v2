@@ -128,7 +128,8 @@ int main() {
     peri_clock,
     peri_timer,
     peri_uart,
-    peri_video
+    peri_video,
+    peri_gpio
   };
 
   nPeripherals = (sizeof(peripherals)/sizeof(dolos_peripheral));
