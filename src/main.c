@@ -13,9 +13,15 @@ static struct termios old_tio, new_tio;
 
 #define GP2X_RAM_SIZE (64 * 1024 * 1024)
 
-static void* gp2x_ram;
+void* gp2x_ram;
 static GHashTable* mmio_read_callbacks;
 static GHashTable* mmio_write_callbacks;
+
+SDL_Renderer* sdlRenderer;
+static SDL_Window* sdlWindow;
+static SDL_Thread* peripheralsThread;
+
+static int nPeripherals;
 
 static void add_read_callback(uint32_t addr, mem_callback cb) {
   g_hash_table_insert(mmio_read_callbacks, GUINT_TO_POINTER(addr), cb);
@@ -80,10 +86,21 @@ void clock_cpu(pt_arm_cpu* arm920, bool log) {
   }
 }
 
+int peripheralsThreadFn(void* data) {
+  dolos_peripheral* peripherals = (dolos_peripheral*) data;
+  while(true) {
+    for(int i = 0 ; i < nPeripherals ; i++) {
+      peripherals[i].tick();
+    }
+  }
+
+  return 0;
+}
+
 void cleanup() {
-    //  SDL_DestroyRenderer(sdlRenderer);
-  //  SDL_DestroyWindow(sdlWindow);
-  //  SDL_Quit();
+  SDL_DestroyRenderer(sdlRenderer);
+  SDL_DestroyWindow(sdlWindow);
+  SDL_Quit();
 
   g_hash_table_destroy(mmio_read_callbacks);
   g_hash_table_destroy(mmio_write_callbacks);
@@ -110,9 +127,13 @@ int main() {
     peri_nand,
     peri_clock,
     peri_timer,
-    peri_uart
+    peri_uart,
+    peri_video
   };
-  for(int i = 0 ; i < (sizeof(peripherals)/sizeof(dolos_peripheral)) ; i++) {
+
+  nPeripherals = (sizeof(peripherals)/sizeof(dolos_peripheral));
+  
+  for(int i = 0 ; i < nPeripherals ; i++) {
     dolos_peripheral p = peripherals[i];
     printf("Initialising %s\n", p.name);
     int r = p.init(&add_read_callback, &add_write_callback);
@@ -138,8 +159,11 @@ int main() {
     return 1;
   }
       
-  //  SDL_Window* sdlWindow = SDL_CreateWindow("dolos2x", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 960, 0);
-  //  SDL_Renderer* sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
+  sdlWindow = SDL_CreateWindow("dolos2x", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 960, 0);
+  sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
+
+  peripheralsThread = SDL_CreateThread(peripheralsThreadFn, "Peripherals Thread", peripherals);
+  
   while(true){//arm920.r15 != 0xE8) {
     clock_cpu(&arm920, false);
   }

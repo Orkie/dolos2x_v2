@@ -174,8 +174,11 @@ static int init(add_mem_callback add_read_callback, add_mem_callback add_write_c
   return 0;
 }
 
+static void tick(void) {}
+
 dolos_peripheral peri_nand = {
   .name = "NAND",
-  .init = &init
+  .init = &init,
+  .tick = &tick
 };
 

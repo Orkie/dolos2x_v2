@@ -15,7 +15,8 @@ sources = [
   'src/nand.c',
   'src/clock.c',
   'src/timer.c',
-  'src/uart.c'
+  'src/uart.c',
+  'src/video.c'
 ]
 
 #################################################
