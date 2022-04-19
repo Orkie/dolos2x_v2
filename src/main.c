@@ -221,8 +221,28 @@ int main() {
   unsigned int debugLength = 0;
   uint8_t debugChecksum = 0x0;
 
-  void debugSendAck(TCPsocket sock) {
-    SDLNet_TCP_Send(sock, "+", 1);
+  uint8_t checksum(const char *buf, size_t len) {
+	uint8_t csum;
+	csum = 0;
+	while (len--) {
+	  csum += *buf++;
+	}
+	return csum;
+  }
+
+  char* hex = "0123456789abcdef";
+
+  void debugSend(TCPsocket sock, const char* msg) {
+    SDLNet_TCP_Send(sock, "+$", 2);
+    SDLNet_TCP_Send(sock, "#", 1);
+    int length = strlen(msg);
+    SDLNet_TCP_Send(sock, msg, length);
+    uint8_t checksumByte = checksum(msg, length);
+    char checksum[2] = {
+      hex[((checksumByte>>4)&0xF)],
+      hex[(checksumByte&0xF)]
+    };
+    SDLNet_TCP_Send(sock, checksum, 2); // TODO - send as 2 hex bytes
   }
   
   while(true) {
@@ -250,7 +270,7 @@ int main() {
 	  debugLength = 0;
 	  // TODO - verify checksum and run command
 	  printf("Got command: %s\n", debugBuffer);
-	  debugSendAck(new_tcpsock);
+	  debugSend(new_tcpsock, "");
 	}
       }
       printf("\nDebugger disconnected\n");
