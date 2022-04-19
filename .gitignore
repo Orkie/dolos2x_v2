@@ -52,6 +52,8 @@ Mkfile.old
 dkms.conf
 
 subprojects/petraea
+subprojects/SDL2_net-*
+subprojects/packagecache
 build/
 data/
 

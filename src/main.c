@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <SDL.h>
+#include <SDL_net.h>
 #include <glib.h>
 
 #include <dolos2x.h>
@@ -20,8 +21,15 @@ static GHashTable* mmio_write_callbacks;
 SDL_Renderer* sdlRenderer;
 static SDL_Window* sdlWindow;
 static SDL_Thread* peripheralsThread;
+static SDL_Thread* arm920Thread;
+
+static IPaddress ip;
+static TCPsocket tcpsock;
 
 static int nPeripherals;
+
+//static mem_callback mmio_read_callbacks[];
+//static mem_callback mmio_write_callbacks[];
 
 static void add_read_callback(uint32_t addr, mem_callback cb) {
   g_hash_table_insert(mmio_read_callbacks, GUINT_TO_POINTER(addr), cb);
@@ -30,6 +38,12 @@ static void add_read_callback(uint32_t addr, mem_callback cb) {
 static void add_write_callback(uint32_t addr, mem_callback cb) {
   g_hash_table_insert(mmio_write_callbacks, GUINT_TO_POINTER(addr), cb);
 }
+
+typedef enum {
+  AWAITING_START,
+  READING_COMMAND,
+  READING_CHECKSUM
+} debugger_read_state;
 
 // TODO - when arm940 is added, these need to block on non-IO (i.e. RAM) accesses while the other core has the bus
 int bus_fetch(uint32_t addr, int bytes, void* ret) {
@@ -43,12 +57,12 @@ int bus_fetch(uint32_t addr, int bytes, void* ret) {
     }
     return 0;
   } else {
-    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
+    void (*cb)(uint32_t, int, void*) = NULL;//g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
     if(cb != NULL) {
       (*cb)(addr, bytes, ret);
       return 0;
     } else {
-      fprintf(stderr, "Tried to read unmapped address 0x%.8x\n", addr);
+      //      fprintf(stderr, "Tried to read unmapped address 0x%.8x\n", addr);
       return -1;
     }
   }
@@ -65,12 +79,12 @@ int bus_write(uint32_t addr, int bytes, void* value) {
     }
     return 0;
   } else {
-    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_write_callbacks, GUINT_TO_POINTER(addr));
+    void (*cb)(uint32_t, int, void*) = NULL;//g_hash_table_lookup(mmio_write_callbacks, GUINT_TO_POINTER(addr));
     if(cb != NULL) {
       (*cb)(addr, bytes, value);
       return 0;
     } else {
-      fprintf(stderr, "Tried to write unmapped address 0x%.8x\n", addr);
+      //      fprintf(stderr, "Tried to write unmapped address 0x%.8x\n", addr);
       return -1;
     }
   }
@@ -97,9 +111,30 @@ int peripheralsThreadFn(void* data) {
   return 0;
 }
 
+int arm920ThreadFn(void* data) {
+  pt_arm_cpu* arm920 = (pt_arm_cpu*) data;
+  uint32_t start = SDL_GetTicks();
+  long n;
+  while(true){//arm920.r15 != 0xE8) {
+    pt_arm_clock(arm920);
+    n++;
+    if(n > 220000000) {
+      printf("Ran 220M instructions in %u ms\n", (SDL_GetTicks() - start));
+      start = SDL_GetTicks();
+      n = 0;
+    }
+    //    clock_cpu(&arm920, false);
+  }
+
+}
+
 void cleanup() {
   SDL_DestroyRenderer(sdlRenderer);
   SDL_DestroyWindow(sdlWindow);
+
+  SDLNet_TCP_Close(tcpsock);
+  
+  SDLNet_Quit();
   SDL_Quit();
 
   g_hash_table_destroy(mmio_read_callbacks);
@@ -120,6 +155,21 @@ int main() {
   gp2x_ram = calloc(1, GP2X_RAM_SIZE);
   mmio_read_callbacks = g_hash_table_new(g_direct_hash, g_direct_equal);
   mmio_write_callbacks = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+  SDL_Init(SDL_INIT_EVERYTHING);
+  SDLNet_Init();
+
+  if(SDLNet_ResolveHost(&ip, NULL, 2345) == -1) {
+    printf("SDLNet_ResolveHost: %s\n", SDLNet_GetError());
+    exit(1);
+  }
+
+  tcpsock = SDLNet_TCP_Open(&ip);
+  if(!tcpsock) {
+    printf("SDLNet_TCP_Open: %s\n", SDLNet_GetError());
+    exit(2);
+  }
+
 
   atexit(cleanup);
 
@@ -164,15 +214,48 @@ int main() {
   sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
 
   peripheralsThread = SDL_CreateThread(peripheralsThreadFn, "Peripherals Thread", peripherals);
-  
-  while(true){//arm920.r15 != 0xE8) {
-    clock_cpu(&arm920, false);
+
+  arm920Thread = SDL_CreateThread(arm920ThreadFn, "ARM920T Thread", &arm920);
+
+  uint8_t debugBuffer[4096];
+  unsigned int debugLength = 0;
+  uint8_t debugChecksum = 0x0;
+
+  void debugSendAck(TCPsocket sock) {
+    SDLNet_TCP_Send(sock, "+", 1);
   }
-  printf("Hit breakpoint 0xE8\n");
   
-  char c;
-  while((c = fgetc(stdin)) != 'q') {
-    clock_cpu(&arm920, true);
+  while(true) {
+    TCPsocket new_tcpsock = SDLNet_TCP_Accept(tcpsock);
+    debugger_read_state state = AWAITING_START;
+    if(new_tcpsock) {
+      printf("Debugger connected\n");
+      while(true) {
+	uint8_t byte;
+	if(SDLNet_TCP_Recv(new_tcpsock, &byte, 1) <= 0) {
+	  break;
+	}
+
+	if(state == AWAITING_START && byte == '$') {
+	  state = READING_COMMAND;
+	} else if(state == READING_COMMAND && byte != '#') {
+	  // TODO - check we aren't overflowing the buffer
+	  debugBuffer[debugLength++] = byte;
+	} else if(state == READING_COMMAND && byte == '#') {
+	  state = READING_CHECKSUM;
+	  debugBuffer[debugLength++] = 0x0;
+	} else if(state == READING_CHECKSUM) {
+	  debugChecksum = byte;
+	  state = AWAITING_START;
+	  debugLength = 0;
+	  // TODO - verify checksum and run command
+	  printf("Got command: %s\n", debugBuffer);
+	  debugSendAck(new_tcpsock);
+	}
+      }
+      printf("\nDebugger disconnected\n");
+    }
+    SDL_Delay(200);
   }
 }
 

@@ -4,18 +4,9 @@
 #include <sys/time.h>
 
 static struct timeval lastTickTime;
-static uint32_t rTCOUNT = 0;
+static volatile uint32_t rTCOUNT = 0;
 
-static void TCOUNT_read(uint32_t addr, int bytes, void* ret) {
-  // TODO -only if timer is enabled
-  time_t lastSec = lastTickTime.tv_sec;
-  suseconds_t lastUsec = lastTickTime.tv_usec;
-  gettimeofday(&lastTickTime, NULL);
-  
-  unsigned long long elapsedNsecs = ((lastTickTime.tv_sec - lastSec) * 1000000000) + ((lastTickTime.tv_usec - lastUsec) * 1000);
-  unsigned long long elapsedTicks = (elapsedNsecs / 135);
-  rTCOUNT += elapsedTicks;
-  
+static void TCOUNT_read(uint32_t addr, int bytes, void* ret) {  
   U32_VAL(ret) = rTCOUNT;
 }
 
@@ -31,7 +22,16 @@ static int init(add_mem_callback add_read_callback, add_mem_callback add_write_c
   return 0;
 }
 
-static void tick(void) {}
+static void tick(void) {
+  // TODO -only if timer is enabled
+  time_t lastSec = lastTickTime.tv_sec;
+  suseconds_t lastUsec = lastTickTime.tv_usec;
+  gettimeofday(&lastTickTime, NULL);
+  
+  unsigned long long elapsedNsecs = ((lastTickTime.tv_sec - lastSec) * 1000000000) + ((lastTickTime.tv_usec - lastUsec) * 1000);
+  unsigned long long elapsedTicks = (elapsedNsecs / 135);
+  rTCOUNT += elapsedTicks;
+}
 
 dolos_peripheral peri_timer = {
   .name = "Timer",
