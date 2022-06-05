@@ -235,16 +235,16 @@ int main() {
   void debugSend(TCPsocket sock, const char* msg) {
     SDLNet_TCP_Send(sock, "+$", 2);
 
+    printf("GDB: Sending message: %s\n", msg);
+
     char response[2048] = {0x0};
     int responseLength = 0;
+
+    int length = strlen(msg);
     
-    for(int b = 0 ; b < strlen(msg) ; b++) {
-      response[responseLength++] = msg[b];
-    }
+    SDLNet_TCP_Send(sock, msg, length);
 
-    SDLNet_TCP_Send(sock, response, responseLength);
-
-    uint8_t checksumByte = checksum(response, responseLength);
+    uint8_t checksumByte = checksum(msg, length);
     char checksum[2] = {
       hex[((checksumByte>>4)&0xF)],
       hex[(checksumByte&0xF)]
@@ -257,6 +257,8 @@ int main() {
   while(true) {
     TCPsocket new_tcpsock = SDLNet_TCP_Accept(tcpsock);
     debugger_read_state state = AWAITING_START;
+    char msg[4096];
+    int msgL = 0;
     if(new_tcpsock) {
       printf("GDB: Debugger connected\n");
       while(true) {
@@ -277,8 +279,11 @@ int main() {
 	  debugChecksum = byte;
 	  state = AWAITING_START;
 	  debugLength = 0;
-	  // TODO - verify checksum and run command
+	  // TODO - verify checksum
 	  printf("GDB: Got command: %s\n", debugBuffer);
+	  msgL = 0;
+	  memset(msg, 0, 4096);
+	  
 	  if(strcmp(debugBuffer, "?") == 0) {
 	    printf("GDB: Replying SIGTRAP\n");
 	    debugSend(new_tcpsock, "S50");
@@ -315,6 +320,35 @@ int main() {
 
 	    }
 	    debugSend(new_tcpsock, output);
+	  } else if(debugBuffer[0] == 'm') {
+	    uint32_t addr;
+	    int length;
+	    sscanf(debugBuffer, "m%x,%d", &addr, &length);
+	    
+	    for(int i = 0 ; i < length ; i++) {
+	      uint8_t b = arm920.fetch_byte(&arm920, addr+i, pt_arm_is_privileged(&arm920));
+	      msg[msgL++] = hex[((b>>4)&0xF) % 16];
+	      msg[msgL++] = hex[(b&0xF) % 16];
+	    }
+	    
+	    debugSend(new_tcpsock, msg);
+	  } else if(debugBuffer[0] == 'M') {
+	    uint32_t addr;
+	    int length;
+	    char* data;
+
+	    sscanf(debugBuffer, "M%x,%d:%s", &addr, &length, msg);
+
+	    char buf[3] = {0, 0, '\0'};
+
+	    for(int i = 0 ; i < length ; i++) {
+	      buf[0] = msg[msgL++];
+	      buf[1] = msg[msgL++];
+	      uint8_t parsedByte = strtol(buf, NULL, 16);
+	      arm920.write_byte(&arm920, addr+i, parsedByte, pt_arm_is_privileged(&arm920));
+	    }
+
+	    debugSend(new_tcpsock, "OK");
 	  } else {
 	    printf("GDB: Not sure what to do with this...\n");
 	    debugSend(new_tcpsock, "");
