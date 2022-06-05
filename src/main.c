@@ -57,7 +57,7 @@ int bus_fetch(uint32_t addr, int bytes, void* ret) {
     }
     return 0;
   } else {
-    void (*cb)(uint32_t, int, void*) = NULL;//g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
+    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
     if(cb != NULL) {
       (*cb)(addr, bytes, ret);
       return 0;
@@ -79,7 +79,7 @@ int bus_write(uint32_t addr, int bytes, void* value) {
     }
     return 0;
   } else {
-    void (*cb)(uint32_t, int, void*) = NULL;//g_hash_table_lookup(mmio_write_callbacks, GUINT_TO_POINTER(addr));
+    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_write_callbacks, GUINT_TO_POINTER(addr));
     if(cb != NULL) {
       (*cb)(addr, bytes, value);
       return 0;
@@ -234,15 +234,24 @@ int main() {
 
   void debugSend(TCPsocket sock, const char* msg) {
     SDLNet_TCP_Send(sock, "+$", 2);
-    SDLNet_TCP_Send(sock, "#", 1);
-    int length = strlen(msg);
-    SDLNet_TCP_Send(sock, msg, length);
-    uint8_t checksumByte = checksum(msg, length);
+
+    char response[2048] = {0x0};
+    int responseLength = 0;
+    
+    for(int b = 0 ; b < strlen(msg) ; b++) {
+      response[responseLength++] = msg[b];
+    }
+
+    SDLNet_TCP_Send(sock, response, responseLength);
+
+    uint8_t checksumByte = checksum(response, responseLength);
     char checksum[2] = {
       hex[((checksumByte>>4)&0xF)],
       hex[(checksumByte&0xF)]
     };
-    SDLNet_TCP_Send(sock, checksum, 2); // TODO - send as 2 hex bytes
+
+    SDLNet_TCP_Send(sock, "#", 1);
+    SDLNet_TCP_Send(sock, checksum, 2);
   }
   
   while(true) {
@@ -270,7 +279,13 @@ int main() {
 	  debugLength = 0;
 	  // TODO - verify checksum and run command
 	  printf("Got command: %s\n", debugBuffer);
-	  debugSend(new_tcpsock, "");
+	  if(strcmp(debugBuffer, "?") == 0) {
+	    printf("Replying SIGTRAP\n");
+	    debugSend(new_tcpsock, "S50");
+	  } else {
+	    printf("Not sure what to do with this...\n");
+	    debugSend(new_tcpsock, "");
+	  }
 	}
       }
       printf("\nDebugger disconnected\n");

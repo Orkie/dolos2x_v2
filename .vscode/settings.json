@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "dolos2x.h": "c",
+    "stdint.h": "c",
+    "cstdint": "c",
+    "gp2xregs.h": "c"
+  }
+}
