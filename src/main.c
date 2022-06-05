@@ -258,7 +258,7 @@ int main() {
     TCPsocket new_tcpsock = SDLNet_TCP_Accept(tcpsock);
     debugger_read_state state = AWAITING_START;
     if(new_tcpsock) {
-      printf("Debugger connected\n");
+      printf("GDB: Debugger connected\n");
       while(true) {
 	uint8_t byte;
 	if(SDLNet_TCP_Recv(new_tcpsock, &byte, 1) <= 0) {
@@ -278,17 +278,50 @@ int main() {
 	  state = AWAITING_START;
 	  debugLength = 0;
 	  // TODO - verify checksum and run command
-	  printf("Got command: %s\n", debugBuffer);
+	  printf("GDB: Got command: %s\n", debugBuffer);
 	  if(strcmp(debugBuffer, "?") == 0) {
-	    printf("Replying SIGTRAP\n");
+	    printf("GDB: Replying SIGTRAP\n");
 	    debugSend(new_tcpsock, "S50");
+	  } else if(strcmp(debugBuffer, "g") == 0) {
+	    printf("GDB: Reading registers\n");
+	    pt_arm_registers* regs = pt_arm_get_regs(&arm920);
+	    char output[201];
+	    output[200] = 0x0;
+	    int outputCount = 0;
+	    for(int i = 0 ; i < 16 ; i++) {
+	      uint32_t r = *regs->regs[i];
+	      printf("returning reg 0x%x\n", r);
+	      output[outputCount++] = hex[((r>>4)&0xF) % 16];
+	      output[outputCount++] = hex[((r>>0)&0xF) % 16];
+
+	      output[outputCount++] = hex[((r>>12)&0xF) % 16];
+	      output[outputCount++] = hex[((r>>8)&0xF) % 16];
+
+	      output[outputCount++] = hex[((r>>20)&0xF) % 16];
+	      output[outputCount++] = hex[((r>>16)&0xF) % 16];
+	      
+	      output[outputCount++] = hex[((r>>28)&0xF) % 16];
+	      output[outputCount++] = hex[((r>>24)&0xF) % 16];
+	    }
+	    for(int i = 0 ; i < 9 ; i++) {
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+	    output[outputCount++] = 'x';
+
+	    }
+	    debugSend(new_tcpsock, output);
 	  } else {
-	    printf("Not sure what to do with this...\n");
+	    printf("GDB: Not sure what to do with this...\n");
 	    debugSend(new_tcpsock, "");
 	  }
 	}
       }
-      printf("\nDebugger disconnected\n");
+      printf("\nGDB: Debugger disconnected\n");
     }
     SDL_Delay(200);
   }
