@@ -117,12 +117,12 @@ int arm920ThreadFn(void* data) {
   long n;
   while(true){//arm920.r15 != 0xE8) {
     pt_arm_clock(arm920);
-    n++;
+    /*    n++;
     if(n > 220000000) {
       printf("Ran 220M instructions in %u ms\n", (SDL_GetTicks() - start));
       start = SDL_GetTicks();
       n = 0;
-    }
+      }*/
     //    clock_cpu(&arm920, false);
   }
 
@@ -235,8 +235,6 @@ int main() {
   void debugSend(TCPsocket sock, const char* msg) {
     SDLNet_TCP_Send(sock, "+$", 2);
 
-    printf("GDB: Sending message: %s\n", msg);
-
     char response[2048] = {0x0};
     int responseLength = 0;
 
@@ -252,6 +250,13 @@ int main() {
 
     SDLNet_TCP_Send(sock, "#", 1);
     SDLNet_TCP_Send(sock, checksum, 2);
+  }
+
+  uint32_t parseUint32(char* str) {
+    uint8_t b1, b2, b3, b4;
+    sscanf(str, "%2x%2x%2x%2x", &b1, &b2, &b3, &b4);
+    uint32_t out = (b4<<24) | (b3 << 16) | (b2 << 8) | b1;
+    return out;
   }
   
   while(true) {
@@ -280,9 +285,9 @@ int main() {
 	  state = AWAITING_START;
 	  debugLength = 0;
 	  // TODO - verify checksum
-	  printf("GDB: Got command: %s\n", debugBuffer);
 	  msgL = 0;
 	  memset(msg, 0, 4096);
+	  printf("GDB: Got command %s\n", debugBuffer);
 	  
 	  if(strcmp(debugBuffer, "?") == 0) {
 	    printf("GDB: Replying SIGTRAP\n");
@@ -295,7 +300,6 @@ int main() {
 	    int outputCount = 0;
 	    for(int i = 0 ; i < 16 ; i++) {
 	      uint32_t r = *regs->regs[i];
-	      printf("returning reg 0x%x\n", r);
 	      output[outputCount++] = hex[((r>>4)&0xF) % 16];
 	      output[outputCount++] = hex[((r>>0)&0xF) % 16];
 
@@ -308,18 +312,55 @@ int main() {
 	      output[outputCount++] = hex[((r>>28)&0xF) % 16];
 	      output[outputCount++] = hex[((r>>24)&0xF) % 16];
 	    }
-	    for(int i = 0 ; i < 9 ; i++) {
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-	    output[outputCount++] = 'x';
-
+	    for(int i = 0 ; i < 8 ; i++) {
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
+	      output[outputCount++] = 'x';
 	    }
+
+	    uint32_t r = *regs->cpsr;
+	    output[outputCount++] = hex[((r>>4)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>0)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>12)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>8)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>20)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>16)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>28)&0xF) % 16];
+	    output[outputCount++] = hex[((r>>24)&0xF) % 16];
+	    
 	    debugSend(new_tcpsock, output);
+	  } else if(debugBuffer[0] == 'G') {
+	    char* buf = debugBuffer+1;
+	    for(int regNum = 0 ; regNum < 25 ; regNum++) {
+	      pt_arm_registers* regs = pt_arm_get_regs(&arm920);
+	      
+	      if(regNum < 16) {
+		*regs->regs[regNum] = parseUint32(buf);
+		printf("GDB: Set r%d to %x\n", regNum, *regs->regs[regNum]);
+	      } else if(regNum == 25) {
+		*regs->cpsr = parseUint32(buf);
+	      }
+
+	      buf += sizeof(char)*8;
+	    }
+	    debugSend(new_tcpsock, "OK");
+	  } else if(debugBuffer[0] == 'p') {
+	    pt_arm_registers* regs = pt_arm_get_regs(&arm920);
+	    uint32_t r = *regs->cpsr;
+	    msg[msgL++] = hex[((r>>4)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>0)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>12)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>8)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>20)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>16)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>28)&0xF) % 16];
+	    msg[msgL++] = hex[((r>>24)&0xF) % 16];
+	    debugSend(new_tcpsock, msg);
 	  } else if(debugBuffer[0] == 'm') {
 	    uint32_t addr;
 	    int length;
@@ -350,7 +391,7 @@ int main() {
 
 	    debugSend(new_tcpsock, "OK");
 	  } else {
-	    printf("GDB: Not sure what to do with this...\n");
+	    printf("GDB: Unknown command: %s\n", debugBuffer);
 	    debugSend(new_tcpsock, "");
 	  }
 	}
