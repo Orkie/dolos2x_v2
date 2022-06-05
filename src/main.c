@@ -337,16 +337,29 @@ int main() {
 	  } else if(debugBuffer[0] == 'G') {
 	    char* buf = debugBuffer+1;
 	    for(int regNum = 0 ; regNum < 25 ; regNum++) {
-	      pt_arm_registers* regs = pt_arm_get_regs(&arm920);
-	      
+	      pt_arm_registers* regs = pt_arm_get_regs(&arm920);	      
 	      if(regNum < 16) {
 		*regs->regs[regNum] = parseUint32(buf);
 		printf("GDB: Set r%d to %x\n", regNum, *regs->regs[regNum]);
 	      } else if(regNum == 25) {
 		*regs->cpsr = parseUint32(buf);
+		printf("GDB: Set CPSR to %x\n", regNum, *regs->cpsr);
 	      }
 
 	      buf += sizeof(char)*8;
+	    }
+	    debugSend(new_tcpsock, "OK");
+	  } else if(debugBuffer[0] == 'P') {
+	    int regNum;
+	    sscanf(debugBuffer, "P%x=%s", &regNum, msg);
+	    uint32_t val = parseUint32(msg);
+	    pt_arm_registers* regs = pt_arm_get_regs(&arm920);	      
+	    if(regNum < 16) {
+	      *regs->regs[regNum] = val;
+	      printf("GDB: Set r%d to %x\n", regNum, *regs->regs[regNum]);
+	    } else if(regNum == 25) {
+	      *regs->cpsr = val;
+	      printf("GDB: Set CPSR to %x\n", regNum, *regs->cpsr);
 	    }
 	    debugSend(new_tcpsock, "OK");
 	  } else if(debugBuffer[0] == 'p') {
@@ -376,7 +389,6 @@ int main() {
 	  } else if(debugBuffer[0] == 'M') {
 	    uint32_t addr;
 	    int length;
-	    char* data;
 
 	    sscanf(debugBuffer, "M%x,%d:%s", &addr, &length, msg);
 
