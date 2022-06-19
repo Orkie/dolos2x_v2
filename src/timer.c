@@ -14,10 +14,10 @@ static void TCOUNT_write(uint32_t addr, int bytes, void* value) {
   rTCOUNT = U32_VAL(value); // TODO - simulate the problem with writing 0
 }
 
-static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback) {
+static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback, add_reg_binding32 bind_reg32) {
   gettimeofday(&lastTickTime, NULL);
-  add_read_callback(REG(TCOUNT), TCOUNT_read);
   add_write_callback(REG(TCOUNT), TCOUNT_write);
+  bind_reg32(REG(TCOUNT), &rTCOUNT);
 
   return 0;
 }

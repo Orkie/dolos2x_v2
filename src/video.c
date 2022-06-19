@@ -18,12 +18,12 @@ static void MLC_STL_OADRH_write(uint32_t addr, int bytes, void* value) {
   rMLC_STL_ADDR = (rMLC_STL_ADDR&0xFFFF) | (U16_VAL(value) << 16);
 }
 
-static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback) {
+static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback, add_reg_binding32 bind_reg32, add_reg_binding16 bind_reg16) {
   rGPIOBPINLVL = 0;
 
   lastVsync = SDL_GetTicks();
-  
-  add_read_callback(REG(GPIOBPINLVL), GPIOBPINLVL_read);
+
+  bind_reg16(REG(GPIOBPINLVL), &rGPIOBPINLVL);
   add_write_callback(REG(MLC_STL_OADRL), MLC_STL_OADRL_write);
   add_write_callback(REG(MLC_STL_OADRH), MLC_STL_OADRH_write);
   

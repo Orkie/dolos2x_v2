@@ -5,9 +5,11 @@
 
 typedef void (*mem_callback)(uint32_t, int, void*);
 typedef void (*add_mem_callback)(uint32_t, mem_callback);
+typedef void (*add_reg_binding32)(uint32_t, volatile uint32_t*);
+typedef void (*add_reg_binding16)(uint32_t, volatile uint16_t*);
 
 typedef struct {
-  int (*init)(add_mem_callback, add_mem_callback);
+  int (*init)(add_mem_callback, add_mem_callback, add_reg_binding32, add_reg_binding16);
   void (*tick)(void);
   const char* name;
 } dolos_peripheral;

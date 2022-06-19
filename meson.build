@@ -1,8 +1,9 @@
-project('dolos2x', 'c')
+project('dolos2x', 'c',
+  default_options : 'optimization=2')
 
 libpetraea_dep = dependency('libpetraea', fallback : ['petraea', 'libpetraea_dep'])
 libsdl2_dep = dependency('sdl2')
-libsdl2_net_dep = dependency('sdl2_net')
+libsdl2_net_dep = dependency('SDL2_net')
 glib_dep = dependency('glib-2.0')
 
 inc = include_directories('include')

@@ -20,10 +20,10 @@ static void FSTATUS0_read(uint32_t addr, int bytes, void* value) {
   U16_VAL(value) = 0x0;
 }
 
-static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback) {
+static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback, add_reg_binding32 bind_reg32, add_reg_binding16 bind_reg16) {
   add_read_callback(REG(RHB0), RHB0_read);
-  add_read_callback(REG(FSTATUS0), FSTATUS0_read);
   add_write_callback(REG(THB0), THB0_write);
+  bind_reg32(REG(FSTATUS0), &rFSTATUS0);
 
   return 0;
 }

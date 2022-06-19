@@ -14,17 +14,18 @@ static void GPIODPINLVL_read(uint32_t addr, int bytes, void* ret) {
 }
 
 static void GPIOMPINLVL_read(uint32_t addr, int bytes, void* ret) {
+  printf("Reading GPIOMPINLVL $0x%x\n", rGPIOMPINLVL);
   U16_VAL(ret) = rGPIOMPINLVL;
 }
 
-static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback) {
+static int init(add_mem_callback add_read_callback, add_mem_callback add_write_callback, add_reg_binding32 bind_reg32, add_reg_binding16 bind_reg16) {
   rGPIOCPINLVL = 0xFFFF;
   rGPIODPINLVL = 0xFFFF;	
   rGPIOMPINLVL = 0xFFFF;	
 
-  add_read_callback(REG(GPIOCPINLVL), GPIOCPINLVL_read);
-  add_read_callback(REG(GPIODPINLVL), GPIODPINLVL_read);
-  add_read_callback(REG(GPIOMPINLVL), GPIOMPINLVL_read);
+  bind_reg16(REG(GPIOCPINLVL), &rGPIOCPINLVL);
+  bind_reg16(REG(GPIODPINLVL), &rGPIODPINLVL);
+  bind_reg16(REG(GPIOMPINLVL), &rGPIOMPINLVL);
 
   return 0;
 }

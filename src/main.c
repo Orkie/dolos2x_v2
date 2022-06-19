@@ -31,11 +31,26 @@ static int nPeripherals;
 //static mem_callback mmio_read_callbacks[];
 //static mem_callback mmio_write_callbacks[];
 
+static uint32_t* bound_reg32[0x4000];
+static uint32_t* bound_reg16[0x8000];
+
 static void add_read_callback(uint32_t addr, mem_callback cb) {
+  printf("adding write callback 0x%x\n", addr);
   g_hash_table_insert(mmio_read_callbacks, GUINT_TO_POINTER(addr), cb);
 }
 
+static void bind_reg32(uint32_t addr, volatile uint32_t* reg) {
+    printf("binding register onto 0x%x\n", addr);
+    bound_reg32[(addr - 0xc0000000) >> 2] = reg;
+}
+
+static void bind_reg16(uint32_t addr, volatile uint16_t* reg) {
+    printf("binding register onto 0x%x\n", addr);
+    bound_reg16[(addr - 0xc0000000) >> 1] = reg;
+}
+
 static void add_write_callback(uint32_t addr, mem_callback cb) {
+  printf("adding read callback 0x%x\n", addr);
   g_hash_table_insert(mmio_write_callbacks, GUINT_TO_POINTER(addr), cb);
 }
 
@@ -47,25 +62,46 @@ typedef enum {
 
 // TODO - when arm940 is added, these need to block on non-IO (i.e. RAM) accesses while the other core has the bus
 int bus_fetch(uint32_t addr, int bytes, void* ret) {
+  if(addr >= 0xc0000000 && addr < 0xc0010000) {
+    if(bytes == 4) {
+      // Try to get direct binding first
+      uint32_t* bound = bound_reg32[(addr - 0xc0000000) >> 2];
+      if(bound != NULL) {
+	*((uint32_t*)ret) = *bound;
+	return 0;
+      }
+    } else if(bytes == 2) {
+      // Try to get direct binding first
+      uint16_t* bound = bound_reg16[(addr - 0xc0000000) >> 1];
+      if(bound != NULL) {
+	*((uint16_t*)ret) = *bound;
+	return 0;
+      }
+    }
+  }
+
   if(addr < GP2X_RAM_SIZE) {
     if(bytes == 4) {
-      *((uint32_t*)ret) = ((uint32_t*)gp2x_ram)[addr>>2];
+      uint32_t val = ((uint32_t*)gp2x_ram)[addr>>2];
+      *((uint32_t*)ret) = val;
     } else if(bytes == 2) {
       *((uint16_t*)ret) = ((uint16_t*)gp2x_ram)[addr>>1];
     } else {
       *((uint8_t*)ret) = ((uint8_t*)gp2x_ram)[addr];
     }
     return 0;
-  } else {
-    void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
-    if(cb != NULL) {
-      (*cb)(addr, bytes, ret);
-      return 0;
-    } else {
-      //      fprintf(stderr, "Tried to read unmapped address 0x%.8x\n", addr);
-      return -1;
-    }
   }
+      
+  void (*cb)(uint32_t, int, void*) = g_hash_table_lookup(mmio_read_callbacks, GUINT_TO_POINTER(addr));
+  if(cb != NULL) {
+          printf("Accessing MMIO 0x%x\n", addr);
+    (*cb)(addr, bytes, ret);
+    return 0;
+  } else {
+    //      fprintf(stderr, "Tried to read unmapped address 0x%.8x\n", addr);
+    return -1;
+  }
+
 }
 
 int bus_write(uint32_t addr, int bytes, void* value) {
@@ -117,12 +153,12 @@ int arm920ThreadFn(void* data) {
   long n;
   while(true){//arm920.r15 != 0xE8) {
     pt_arm_clock(arm920);
-    /*    n++;
+       n++;
     if(n > 220000000) {
       printf("Ran 220M instructions in %u ms\n", (SDL_GetTicks() - start));
       start = SDL_GetTicks();
       n = 0;
-      }*/
+      }
     //    clock_cpu(&arm920, false);
   }
 
@@ -187,7 +223,7 @@ int main() {
   for(int i = 0 ; i < nPeripherals ; i++) {
     dolos_peripheral p = peripherals[i];
     printf("Initialising %s\n", p.name);
-    int r = p.init(&add_read_callback, &add_write_callback);
+    int r = p.init(&add_read_callback, &add_write_callback, &bind_reg32, &bind_reg16);
     if(r != 0) {
       fprintf(stderr, "Failed to initialise %s (%d), terminating!\n", p.name, r);
       exit(1);
@@ -404,6 +440,31 @@ int main() {
 	    debugSend(new_tcpsock, "OK");
 	  } else if(strcmp(debugBuffer, "qAttached") == 0) {
 	    debugSend(new_tcpsock, "1");
+	  } else if(strncmp(debugBuffer, "qSupported", strlen("qSupported")) == 0) {
+	    debugSend(new_tcpsock, "hwbreak+;swbreak-");
+	  } else if(strcmp(debugBuffer, "qfThreadInfo") == 0) {
+	    debugSend(new_tcpsock, "");
+	  } else if(strcmp(debugBuffer, "qsThreadInfo") == 0) {
+	    debugSend(new_tcpsock, "l");
+	  } else if(strcmp(debugBuffer, "qC") == 0) {
+	    debugSend(new_tcpsock, "QC1");
+	  } else if(debugBuffer[0] == 'H') {
+	    debugSend(new_tcpsock, "OK");
+	  } else if(debugBuffer[0] == 'T') {
+	    debugSend(new_tcpsock, "OK");
+	  } else if(debugBuffer[0] == 'S') {
+	    debugSend(new_tcpsock, "S50"); // TODO
+	  } else if(debugBuffer[0] == 'C') {
+	    debugSend(new_tcpsock, "OK");
+	    // TODO - only reply with S50 when a breakpoint is hit
+	  } else if(strcmp(debugBuffer, "qSymbol::") == 0) {
+	    debugSend(new_tcpsock, "OK");
+	  } else if(strncmp(debugBuffer, "Z0", strlen("Z0")) == 0) {
+	    printf("set sw bp\n");
+	    debugSend(new_tcpsock, "OK");
+	  } else if(strncmp(debugBuffer, "Z1", strlen("Z1")) == 0) {
+	    printf("set hw bp\n");
+	    debugSend(new_tcpsock, "OK");	    
 	  } else {
 	    printf("GDB: Unknown command: %s\n", debugBuffer);
 	    debugSend(new_tcpsock, "");
