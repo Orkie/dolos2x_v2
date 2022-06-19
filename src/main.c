@@ -402,6 +402,8 @@ int main() {
 	    }
 
 	    debugSend(new_tcpsock, "OK");
+	  } else if(strcmp(debugBuffer, "qAttached") == 0) {
+	    debugSend(new_tcpsock, "1");
 	  } else {
 	    printf("GDB: Unknown command: %s\n", debugBuffer);
 	    debugSend(new_tcpsock, "");
